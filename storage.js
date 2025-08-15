@@ -1,4 +1,4 @@
-import { ProductModel } from "../shared/schema.js";
+import { ProductModel } from "./shared/schema.js";
 import mongoose from "mongoose";
 
 export class MongoStorage {

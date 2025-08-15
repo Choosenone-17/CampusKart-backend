@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { storage } from "./storage.js";
-import { insertProductSchema } from "../shared/schema.js";
+import { insertProductSchema } from "./shared/schema.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
