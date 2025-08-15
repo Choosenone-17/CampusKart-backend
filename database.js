@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config(); // Load .env variables
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/CampusKart';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://yashvardhan_17:8pyZf9S5vjatsFAL@campuskart.wtn5r78.mongodb.net/?retryWrites=true&w=majority&appName=CampusKart';
 
 /**
  * Connect to MongoDB using Mongoose.
