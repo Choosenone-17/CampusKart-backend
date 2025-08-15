@@ -1,16 +1,27 @@
 import express from "express";
 import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "./vite.js";
 import { connectDB } from "./database.js";
+
+// Small log function to replace the one from vite.js
+function log(message, source = "express") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse = undefined;
+  let capturedJsonResponse;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -25,11 +36,9 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       if (logLine.length > 80) {
         logLine = logLine.slice(0, 79) + "…";
       }
-
       log(logLine);
     }
   });
@@ -38,28 +47,30 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Connect to MongoDB
-  await connectDB();
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    log("MongoDB connected successfully");
 
-  const server = await registerRoutes(app);
+    // Register routes
+    const server = await registerRoutes(app);
 
-  app.use((err, _req, res, _next) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
+    // Error handling middleware
+    app.use((err, _req, res, _next) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      log(`Error: ${message}`);
+      res.status(status).json({ message });
+    });
 
-  log(`Error: ${message}`);
-  res.status(status).json({ message });
-});
+    // Start server
+    const port = parseInt(process.env.PORT || "5000", 10);
+    server.listen(port, () => {
+      log(`Server running on http://localhost:${port}`);
+    });
 
-
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  } catch (err) {
+    log(`Startup Error: ${err.message}`);
+    process.exit(1);
   }
-
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen(port, "localhost", () => {
-  log(`serving on http://localhost:${port}`);
-});
 })();
