@@ -3,12 +3,8 @@ import dotenv from 'dotenv';
 
 dotenv.config(); // Load .env variables
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://yashvardhan_17:8pyZf9S5vjatsFAL@campuskart.wtn5r78.mongodb.net/?retryWrites=true&w=majority&appName=CampusKart';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://yashvardhan_17:8pyZf9S5vjatsFAL@campuskart.wtn5r78.mongodb.net/CampusKart?retryWrites=true&w=majority&appName=CampusKart';
 
-/**
- * Connect to MongoDB using Mongoose.
- * Supports both local MongoDB and Atlas cloud.
- */
 export const connectDB = async () => {
   try {
     await mongoose.connect(MONGODB_URI, {
