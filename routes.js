@@ -5,12 +5,25 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import { v2 as cloudinary } from "cloudinary";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function registerRoutes(app) {
+  // Local temp upload dir
   const uploadDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
   }
+
   const storageConfig = multer.diskStorage({
     destination: (req, file, cb) => {
       cb(null, uploadDir);
@@ -18,23 +31,35 @@ export async function registerRoutes(app) {
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
       cb(null, Date.now() + ext);
-    }
+    },
   });
 
   const upload = multer({ storage: storageConfig });
 
-  // 🖼 Upload endpoint
-  app.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
+  // 🖼 Upload endpoint (Cloudinary)
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
 
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  
-  res.json({ url: fileUrl });
-});
+    try {
+      // Upload file to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "campuskart",
+      });
 
-  // Serve static uploads
+      // Remove temp file
+      fs.unlinkSync(req.file.path);
+
+      // Return Cloudinary URL
+      res.json({ url: result.secure_url });
+    } catch (err) {
+      console.error("Cloudinary upload error:", err);
+      res.status(500).json({ message: "Image upload failed" });
+    }
+  });
+
+  // (Optional) Keep serving local uploads if needed for dev
   app.use("/uploads", express.static(uploadDir));
 
   // Get all products
@@ -42,13 +67,13 @@ export async function registerRoutes(app) {
     try {
       const { category } = req.query;
       let products;
-      
-      if (category && category !== 'all') {
+
+      if (category && category !== "all") {
         products = await storage.getProductsByCategory(category);
       } else {
         products = await storage.getAllProducts();
       }
-      
+
       res.json(products);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
