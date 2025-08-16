@@ -10,16 +10,16 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// --- Debug: log Cloudinary env variables ---
-console.log("CLOUDINARY_CLOUD_NAME:", `"${process.env.CLOUDINARY_CLOUD_NAME}"`);
+// --- Debug: log Cloudinary env variables (safe for dev, remove in prod) ---
+console.log("CLOUDINARY_CLOUD_NAME (raw):", `"${process.env.CLOUDINARY_CLOUD_NAME}"`);
 console.log("CLOUDINARY_API_KEY:", process.env.CLOUDINARY_API_KEY ? "set" : "missing");
 console.log("CLOUDINARY_API_SECRET:", process.env.CLOUDINARY_API_SECRET ? "set" : "missing");
 
-// Cloudinary config
+// ✅ Cloudinary config (normalize & trim values)
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME?.trim().toLowerCase(),
+  api_key: process.env.CLOUDINARY_API_KEY?.trim(),
+  api_secret: process.env.CLOUDINARY_API_SECRET?.trim(),
 });
 
 export async function registerRoutes(app) {
@@ -45,10 +45,10 @@ export async function registerRoutes(app) {
       // Remove temp file
       fs.unlinkSync(req.file.path);
 
-      console.log("Cloudinary upload success:", result.secure_url);
+      console.log("✅ Cloudinary upload success:", result.secure_url);
       res.json({ url: result.secure_url });
     } catch (err) {
-      console.error("Cloudinary upload error:", err.message || err);
+      console.error("❌ Cloudinary upload error:", err.message || err);
       res.status(500).json({ message: "Image upload failed", error: err.message || err });
     }
   });
