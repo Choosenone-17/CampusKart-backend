@@ -1,8 +1,8 @@
 import express from "express";
+import cors from "cors"; 
 import { registerRoutes } from "./routes.js";
 import { connectDB } from "./database.js";
 
-// Small log function to replace the one from vite.js
 function log(message, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -14,10 +14,15 @@ function log(message, source = "express") {
 }
 
 const app = express();
+
+app.use(cors({
+  origin: "https://campuskartz.vercel.app", 
+  credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -51,8 +56,6 @@ app.use((req, res, next) => {
     // Connect to MongoDB
     await connectDB();
     log("MongoDB connected successfully");
-
-    // Register routes
     const server = await registerRoutes(app);
 
     // Error handling middleware
