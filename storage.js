@@ -1,5 +1,6 @@
 import { ProductModel } from "./shared/schema.js";
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 export class MongoStorage {
   toProduct(doc) {
@@ -15,6 +16,7 @@ export class MongoStorage {
       contactDetails: doc.contactDetails,
       condition: doc.condition, 
       createdAt: doc.createdAt,
+      // ⚠️ Don't expose deleteKey here (keep it private)
     };
   }
 
@@ -55,12 +57,18 @@ export class MongoStorage {
 
   async createProduct(insertProduct) {
     try {
+      // generate random deleteKey
+      const deleteKey = crypto.randomBytes(6).toString("hex");
+
       const product = new ProductModel({
         ...insertProduct,
-        images: insertProduct.images || [], // store array of image URLs
+        images: insertProduct.images || [],
+        deleteKey,
       });
+
       const savedProduct = await product.save();
-      return this.toProduct(savedProduct);
+      // return both product and deleteKey (so frontend can show it to user)
+      return { ...this.toProduct(savedProduct), deleteKey };
     } catch (error) {
       console.error("Error creating product:", error);
       throw new Error("Failed to create product");
@@ -84,13 +92,20 @@ export class MongoStorage {
     }
   }
 
-  async deleteProduct(id) {
+  async deleteProduct(id, deleteKey) {
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return false;
       }
-      const result = await ProductModel.findByIdAndDelete(id);
-      return !!result;
+      const product = await ProductModel.findById(id);
+      if (!product) return false;
+
+      if (product.deleteKey !== deleteKey) {
+        return false; // wrong key
+      }
+
+      await ProductModel.findByIdAndDelete(id);
+      return true;
     } catch (error) {
       console.error("Error deleting product:", error);
       return false;

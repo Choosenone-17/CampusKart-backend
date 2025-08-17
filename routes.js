@@ -10,12 +10,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// --- Debug: log Cloudinary env variables (safe for dev, remove in prod) ---
-console.log("CLOUDINARY_CLOUD_NAME (raw):", `"${process.env.CLOUDINARY_CLOUD_NAME}"`);
-console.log("CLOUDINARY_API_KEY:", process.env.CLOUDINARY_API_KEY ? "set" : "missing");
-console.log("CLOUDINARY_API_SECRET:", process.env.CLOUDINARY_API_SECRET ? "set" : "missing");
-
-// ✅ Cloudinary config (normalize & trim values)
+// ✅ Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME?.trim().toLowerCase(),
   api_key: process.env.CLOUDINARY_API_KEY?.trim(),
@@ -33,19 +28,13 @@ export async function registerRoutes(app) {
 
   const upload = multer({ storage: storageConfig });
 
-  // 🖼 Upload endpoint (Cloudinary)
+  // 🖼 Upload endpoint
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    console.log("Uploading file:", req.file.path);
-
     try {
       const result = await cloudinary.uploader.upload(req.file.path, { folder: "campuskart" });
-
-      // Remove temp file
-      fs.unlinkSync(req.file.path);
-
-      console.log("✅ Cloudinary upload success:", result.secure_url);
+      fs.unlinkSync(req.file.path); // remove temp
       res.json({ url: result.secure_url });
     } catch (err) {
       console.error("❌ Cloudinary upload error:", err.message || err);
@@ -80,11 +69,17 @@ export async function registerRoutes(app) {
     }
   });
 
+  // ✅ Create product → return product + deleteKey
   app.post("/api/products", async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(validatedData);
-      res.status(201).json(product);
+
+      // attach deleteKey temporarily to response
+      res.status(201).json({
+        ...product,
+        deleteKey: validatedData.deleteKey, // must be saved by seller
+      });
     } catch (error) {
       console.error("Create product error:", error);
       res.status(400).json({ message: error.message });
@@ -103,14 +98,42 @@ export async function registerRoutes(app) {
     }
   });
 
+  // ✅ Delete route (API style)
   app.delete("/api/products/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteProduct(req.params.id);
-      if (!deleted) return res.status(404).json({ message: "Product not found" });
+      const { deleteKey } = req.body;
+
+      if (!deleteKey) {
+        return res.status(400).json({ message: "Delete key is required" });
+      }
+
+      const deleted = await storage.deleteProduct(req.params.id, deleteKey);
+      if (!deleted) {
+        return res.status(403).json({ message: "Invalid product ID or delete key" });
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error("Delete product error:", error);
       res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
+  // ✅ Delete via direct link (for users who saved the link)
+  app.get("/api/products/delete/:id", async (req, res) => {
+    try {
+      const { key } = req.query;
+      if (!key) return res.status(400).send("❌ Delete key is required");
+
+      const deleted = await storage.deleteProduct(req.params.id, key);
+      if (!deleted) {
+        return res.status(403).send("❌ Invalid product ID or delete key");
+      }
+
+      res.send("✅ Product deleted successfully");
+    } catch (error) {
+      console.error("Delete product error (link):", error);
+      res.status(500).send("❌ Failed to delete product");
     }
   });
 
