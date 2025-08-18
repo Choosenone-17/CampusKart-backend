@@ -7,6 +7,8 @@ import fs from "fs";
 import express from "express";
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
+import Cart from "./models/cart.js";
 
 dotenv.config();
 
@@ -69,16 +71,13 @@ export async function registerRoutes(app) {
     }
   });
 
-  // ✅ Create product → return product + deleteKey
   app.post("/api/products", async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(validatedData);
-
-      // attach deleteKey temporarily to response
       res.status(201).json({
         ...product,
-        deleteKey: validatedData.deleteKey, // must be saved by seller
+        deleteKey: validatedData.deleteKey,
       });
     } catch (error) {
       console.error("Create product error:", error);
@@ -98,19 +97,13 @@ export async function registerRoutes(app) {
     }
   });
 
-  // ✅ Delete route (API style)
   app.delete("/api/products/:id", async (req, res) => {
     try {
       const { deleteKey } = req.body;
-
-      if (!deleteKey) {
-        return res.status(400).json({ message: "Delete key is required" });
-      }
+      if (!deleteKey) return res.status(400).json({ message: "Delete key is required" });
 
       const deleted = await storage.deleteProduct(req.params.id, deleteKey);
-      if (!deleted) {
-        return res.status(403).json({ message: "Invalid product ID or delete key" });
-      }
+      if (!deleted) return res.status(403).json({ message: "Invalid product ID or delete key" });
 
       res.status(204).send();
     } catch (error) {
@@ -119,22 +112,60 @@ export async function registerRoutes(app) {
     }
   });
 
-  // ✅ Delete via direct link (for users who saved the link)
   app.get("/api/products/delete/:id", async (req, res) => {
     try {
       const { key } = req.query;
       if (!key) return res.status(400).send("❌ Delete key is required");
 
       const deleted = await storage.deleteProduct(req.params.id, key);
-      if (!deleted) {
-        return res.status(403).send("❌ Invalid product ID or delete key");
-      }
+      if (!deleted) return res.status(403).send("❌ Invalid product ID or delete key");
 
       res.send("✅ Product deleted successfully");
     } catch (error) {
       console.error("Delete product error (link):", error);
       res.status(500).send("❌ Failed to delete product");
     }
+  });
+
+  // --- Cart routes (MongoDB session-based) ---
+  // Get cart for a session
+  app.get("/api/cart/:sessionId", async (req, res) => {
+    const { sessionId } = req.params;
+    let cart = await Cart.findOne({ sessionId }).populate("products.productId");
+    if (!cart) cart = await Cart.create({ sessionId, products: [] });
+    res.json(cart);
+  });
+
+  // Add product to cart
+  app.post("/api/cart/:sessionId", async (req, res) => {
+    const { sessionId } = req.params;
+    const { productId } = req.body;
+    if (!productId) return res.status(400).json({ message: "productId is required" });
+
+    let cart = await Cart.findOne({ sessionId });
+    if (!cart) cart = await Cart.create({ sessionId, products: [] });
+
+    const existing = cart.products.find(p => p.productId.toString() === productId);
+    if (existing) {
+      existing.quantity += 1;
+    } else {
+      cart.products.push({ productId, quantity: 1 });
+    }
+
+    await cart.save();
+    res.status(201).json(cart);
+  });
+
+  // Remove product from cart
+  app.delete("/api/cart/:sessionId/:productId", async (req, res) => {
+    const { sessionId, productId } = req.params;
+    const cart = await Cart.findOne({ sessionId });
+    if (!cart) return res.status(404).json({ message: "Cart not found" });
+
+    cart.products = cart.products.filter(p => p.productId.toString() !== productId);
+    await cart.save();
+
+    res.json(cart);
   });
 
   return createServer(app);
