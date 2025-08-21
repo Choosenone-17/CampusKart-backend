@@ -33,7 +33,8 @@ export async function registerRoutes(app) {
 
   // 🖼 Upload endpoint
   app.post("/api/upload", upload.single("file"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    if (!req.file)
+      return res.status(400).json({ message: "No file uploaded" });
 
     try {
       const result = await cloudinary.uploader.upload(req.file.path, {
@@ -83,11 +84,11 @@ export async function registerRoutes(app) {
   app.post("/api/products", async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
-      const product = await storage.createProduct(validatedData);
+      const result = await storage.createProduct(validatedData); // { product, secretKey }
 
       res.status(201).json({
-        product: storage.toProduct(product), // safe object (no secretKey)
-        secretKey: product.secretKey, // ✅ exposed only here
+        product: result.product, // already safe, no toProduct call needed
+        secretKey: result.secretKey, // ✅ exposed only here
       });
     } catch (error) {
       console.error("Create product error:", error);

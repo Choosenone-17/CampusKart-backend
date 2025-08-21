@@ -59,30 +59,47 @@ export class MongoStorage {
     }
   }
 
- async createProduct(insertProduct) {
-  try {
-    const secretKey = crypto.randomBytes(6).toString("hex");
+  async createProduct(insertProduct) {
+    try {
+      const secretKey = crypto.randomBytes(6).toString("hex");
 
-    const product = new ProductModel({
-      ...insertProduct,
-      images: insertProduct.images || [],
-      secretKey,
-      status: "available",
-    });
+      const product = new ProductModel({
+        ...insertProduct,
+        images: insertProduct.images || [],
+        secretKey,
+        status: "available",
+      });
 
-    const savedProduct = await product.save();
+      const savedProduct = await product.save();
 
-    // ✅ Wrap the product inside a 'product' object
-    return {
-      product: this.toProduct(savedProduct),
-      secretKey,
-    };
-  } catch (error) {
-    console.error("Error creating product:", error);
-    throw new Error("Failed to create product");
+      if (!savedProduct) {
+        throw new Error("Product creation failed");
+      }
+
+      // Return exactly what frontend expects
+      return {
+        product: {
+          id: savedProduct._id.toString(),
+          title: savedProduct.title,
+          description: savedProduct.description,
+          price: savedProduct.price,
+          category: savedProduct.category,
+          images: savedProduct.images || [],
+          sellerName: savedProduct.sellerName,
+          contactMethod: savedProduct.contactMethod,
+          contactDetails: savedProduct.contactDetails,
+          condition: savedProduct.condition,
+          createdAt: savedProduct.createdAt,
+          status: savedProduct.status || "available",
+          soldAt: savedProduct.soldAt || null,
+        },
+        secretKey,
+      };
+    } catch (error) {
+      console.error("Error creating product:", error);
+      throw new Error("Failed to create product: " + error.message);
+    }
   }
-}
-
 
   async updateProduct(id, updateData) {
     try {
