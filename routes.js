@@ -9,6 +9,7 @@ import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Cart from "./models/cart.js";
+import { ProductModel } from "./shared/schema.js"; // ✅ Import directly for secretKey check
 
 dotenv.config();
 
@@ -75,10 +76,7 @@ export async function registerRoutes(app) {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(validatedData);
-      res.status(201).json({
-        ...product,
-        deleteKey: validatedData.deleteKey,
-      });
+      res.status(201).json(product);
     } catch (error) {
       console.error("Create product error:", error);
       res.status(400).json({ message: error.message });
@@ -97,15 +95,10 @@ export async function registerRoutes(app) {
     }
   });
 
+  // ❌ We are NOT using delete anymore (kept here if you want rollback later)
   app.delete("/api/products/:id", async (req, res) => {
     try {
-      const { deleteKey } = req.body;
-      if (!deleteKey) return res.status(400).json({ message: "Delete key is required" });
-
-      const deleted = await storage.deleteProduct(req.params.id, deleteKey);
-      if (!deleted) return res.status(403).json({ message: "Invalid product ID or delete key" });
-
-      res.status(204).send();
+      res.status(403).json({ message: "Deleting products is disabled. Use 'mark as sold' instead." });
     } catch (error) {
       console.error("Delete product error:", error);
       res.status(500).json({ message: "Failed to delete product" });
@@ -114,21 +107,43 @@ export async function registerRoutes(app) {
 
   app.get("/api/products/delete/:id", async (req, res) => {
     try {
-      const { key } = req.query;
-      if (!key) return res.status(400).send("❌ Delete key is required");
-
-      const deleted = await storage.deleteProduct(req.params.id, key);
-      if (!deleted) return res.status(403).send("❌ Invalid product ID or delete key");
-
-      res.send("✅ Product deleted successfully");
+      res.status(403).send("❌ Deleting products is disabled. Use 'mark as sold' instead.");
     } catch (error) {
       console.error("Delete product error (link):", error);
       res.status(500).send("❌ Failed to delete product");
     }
   });
 
+  // --- ✅ Mark product as sold ---
+  app.post("/api/products/:id/mark-sold", async (req, res) => {
+    try {
+      const { secretKey } = req.body;
+      if (!secretKey) {
+        return res.status(400).json({ message: "Secret key is required" });
+      }
+
+      // ✅ Fetch product directly from DB (with secretKey)
+      const product = await ProductModel.findById(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      if (product.secretKey !== secretKey) {
+        return res.status(403).json({ message: "Invalid secret key" });
+      }
+
+      product.status = "sold";
+      product.soldAt = new Date();
+      await product.save();
+
+      res.json({ message: "✅ Product marked as sold", product: storage.toProduct(product) });
+    } catch (error) {
+      console.error("Mark sold error:", error);
+      res.status(500).json({ message: "Failed to mark product as sold" });
+    }
+  });
+
   // --- Cart routes (MongoDB session-based) ---
-  // Get cart for a session
   app.get("/api/cart/:sessionId", async (req, res) => {
     const { sessionId } = req.params;
     let cart = await Cart.findOne({ sessionId }).populate("products.productId");
@@ -136,7 +151,6 @@ export async function registerRoutes(app) {
     res.json(cart);
   });
 
-  // Add product to cart
   app.post("/api/cart/:sessionId", async (req, res) => {
     const { sessionId } = req.params;
     const { productId } = req.body;
@@ -156,7 +170,6 @@ export async function registerRoutes(app) {
     res.status(201).json(cart);
   });
 
-  // Remove product from cart
   app.delete("/api/cart/:sessionId/:productId", async (req, res) => {
     const { sessionId, productId } = req.params;
     const cart = await Cart.findOne({ sessionId });

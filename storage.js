@@ -10,19 +10,24 @@ export class MongoStorage {
       description: doc.description,
       price: doc.price,
       category: doc.category,
-      images: doc.images || [], 
+      images: doc.images || [],
       sellerName: doc.sellerName,
       contactMethod: doc.contactMethod,
       contactDetails: doc.contactDetails,
-      condition: doc.condition, 
+      condition: doc.condition,
       createdAt: doc.createdAt,
-      // ⚠️ Don't expose deleteKey here (keep it private)
+      status: doc.status || "available",
+      soldAt: doc.soldAt || null,
+      // ⚠️ Do NOT expose secretKey here
     };
   }
 
   async getAllProducts() {
     try {
-      const products = await ProductModel.find().sort({ createdAt: -1 });
+      const products = await ProductModel.find().sort({
+        status: 1, // available first
+        createdAt: -1, // newest first within each status
+      });
       return products.map((doc) => this.toProduct(doc));
     } catch (error) {
       console.error("Error getting all products:", error);
@@ -32,9 +37,7 @@ export class MongoStorage {
 
   async getProductById(id) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return undefined;
-      }
+      if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
       const product = await ProductModel.findById(id);
       return product ? this.toProduct(product) : undefined;
     } catch (error) {
@@ -46,6 +49,7 @@ export class MongoStorage {
   async getProductsByCategory(category) {
     try {
       const products = await ProductModel.find({ category }).sort({
+        status: 1,
         createdAt: -1,
       });
       return products.map((doc) => this.toProduct(doc));
@@ -57,18 +61,20 @@ export class MongoStorage {
 
   async createProduct(insertProduct) {
     try {
-      // generate random deleteKey
-      const deleteKey = crypto.randomBytes(6).toString("hex");
+      // 🔑 Generate random secretKey for seller
+      const secretKey = crypto.randomBytes(6).toString("hex");
 
       const product = new ProductModel({
         ...insertProduct,
         images: insertProduct.images || [],
-        deleteKey,
+        secretKey, // ✅ matches schema.js now
+        status: "available",
       });
 
       const savedProduct = await product.save();
-      // return both product and deleteKey (so frontend can show it to user)
-      return { ...this.toProduct(savedProduct), deleteKey };
+
+      // Return safe product info + secretKey once
+      return { ...this.toProduct(savedProduct), secretKey };
     } catch (error) {
       console.error("Error creating product:", error);
       throw new Error("Failed to create product");
@@ -77,14 +83,14 @@ export class MongoStorage {
 
   async updateProduct(id, updateData) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return undefined;
-      }
+      if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
+
       const updated = await ProductModel.findByIdAndUpdate(
         id,
         { ...updateData },
         { new: true }
       );
+
       return updated ? this.toProduct(updated) : undefined;
     } catch (error) {
       console.error("Error updating product:", error);
@@ -92,24 +98,10 @@ export class MongoStorage {
     }
   }
 
-  async deleteProduct(id, deleteKey) {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return false;
-      }
-      const product = await ProductModel.findById(id);
-      if (!product) return false;
-
-      if (product.deleteKey !== deleteKey) {
-        return false; // wrong key
-      }
-
-      await ProductModel.findByIdAndDelete(id);
-      return true;
-    } catch (error) {
-      console.error("Error deleting product:", error);
-      return false;
-    }
+  // ❌ Delete is disabled (we only allow mark as sold)
+  async deleteProduct(id, secretKey) {
+    console.warn("Delete operation is disabled. Use mark as sold instead.");
+    return false;
   }
 }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import mongoose, { Schema } from "mongoose";
 
-// Zod schema for validation
+// ✅ Zod schema (validation for API input)
 export const insertProductSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
@@ -15,17 +15,22 @@ export const insertProductSchema = z.object({
     "furniture",
     "other",
   ]),
-  images: z.array(z.string().url()).optional().default([]), 
+  images: z.array(z.string().url()).optional().default([]),
   sellerName: z.string().min(1, "Seller name is required"),
   contactMethod: z.enum(["email", "phone", "whatsapp", "telegram"]),
   contactDetails: z.string().min(1, "Contact details are required"),
   condition: z
     .enum(["new", "like-new", "good", "fair", "poor"])
     .optional()
-    .default("good"), 
+    .default("good"),
+
+  // 🔹 New fields for sold-out logic
+  status: z.enum(["available", "sold"]).optional().default("available"),
+  secretKey: z.string().optional(), // generated automatically
+  soldAt: z.date().optional(),
 });
 
-// Mongoose schema
+// ✅ Mongoose schema
 const productSchema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
@@ -43,7 +48,7 @@ const productSchema = new Schema({
       "other",
     ],
   },
-  images: { type: [String], default: [] }, 
+  images: { type: [String], default: [] },
   sellerName: { type: String, required: true },
   contactMethod: {
     type: String,
@@ -57,6 +62,15 @@ const productSchema = new Schema({
     default: "good",
   },
   createdAt: { type: Date, default: Date.now },
+
+  // 🔹 New fields for sold-out logic
+  status: {
+    type: String,
+    enum: ["available", "sold"],
+    default: "available",
+  },
+  secretKey: { type: String, required: true }, 
+  soldAt: { type: Date, default: null },
 });
 
 export const ProductModel = mongoose.model("Product", productSchema);
