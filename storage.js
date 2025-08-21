@@ -59,27 +59,30 @@ export class MongoStorage {
     }
   }
 
-  async createProduct(insertProduct) {
-    try {
-      // 🔑 Generate random secretKey for seller
-      const secretKey = crypto.randomBytes(6).toString("hex");
+ async createProduct(insertProduct) {
+  try {
+    const secretKey = crypto.randomBytes(6).toString("hex");
 
-      const product = new ProductModel({
-        ...insertProduct,
-        images: insertProduct.images || [],
-        secretKey, // ✅ matches schema.js now
-        status: "available",
-      });
+    const product = new ProductModel({
+      ...insertProduct,
+      images: insertProduct.images || [],
+      secretKey,
+      status: "available",
+    });
 
-      const savedProduct = await product.save();
+    const savedProduct = await product.save();
 
-      // Return safe product info + secretKey once
-      return { ...this.toProduct(savedProduct), secretKey };
-    } catch (error) {
-      console.error("Error creating product:", error);
-      throw new Error("Failed to create product");
-    }
+    // ✅ Wrap the product inside a 'product' object
+    return {
+      product: this.toProduct(savedProduct),
+      secretKey,
+    };
+  } catch (error) {
+    console.error("Error creating product:", error);
+    throw new Error("Failed to create product");
   }
+}
+
 
   async updateProduct(id, updateData) {
     try {
