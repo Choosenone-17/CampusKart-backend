@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { storage } from "./storage.js";
-import { insertProductSchema } from "./shared/schema.js";
+import { insertProductSchema, ProductModel } from "./shared/schema.js"; // ✅ both schema + model
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -9,7 +9,6 @@ import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Cart from "./models/cart.js";
-import { ProductModel } from "./shared/schema.js"; // ✅ Import directly for secretKey check
 
 dotenv.config();
 
@@ -26,7 +25,8 @@ export async function registerRoutes(app) {
 
   const storageConfig = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+    filename: (req, file, cb) =>
+      cb(null, Date.now() + path.extname(file.originalname)),
   });
 
   const upload = multer({ storage: storageConfig });
@@ -36,12 +36,16 @@ export async function registerRoutes(app) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     try {
-      const result = await cloudinary.uploader.upload(req.file.path, { folder: "campuskart" });
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "campuskart",
+      });
       fs.unlinkSync(req.file.path); // remove temp
       res.json({ url: result.secure_url });
     } catch (err) {
       console.error("❌ Cloudinary upload error:", err.message || err);
-      res.status(500).json({ message: "Image upload failed", error: err.message || err });
+      res
+        .status(500)
+        .json({ message: "Image upload failed", error: err.message || err });
     }
   });
 
@@ -51,10 +55,12 @@ export async function registerRoutes(app) {
   app.get("/api/products", async (req, res) => {
     try {
       const { category } = req.query;
-      const products = category && category !== "all"
-        ? await storage.getProductsByCategory(category)
-        : await storage.getAllProducts();
-      res.json(products);
+      const products =
+        category && category !== "all"
+          ? await ProductModel.find({ category }).sort({ createdAt: -1 })
+          : await ProductModel.find().sort({ createdAt: -1 });
+
+      res.json(products.map(storage.toProduct)); // ✅ secretKey never exposed
     } catch (error) {
       console.error("Fetch products error:", error);
       res.status(500).json({ message: "Failed to fetch products" });
@@ -64,19 +70,25 @@ export async function registerRoutes(app) {
   app.get("/api/products/:id", async (req, res) => {
     try {
       const product = await storage.getProductById(req.params.id);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      res.json(product);
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
+      res.json(product); // ✅ no secretKey
     } catch (error) {
       console.error("Fetch product error:", error);
       res.status(500).json({ message: "Failed to fetch product" });
     }
   });
 
+  // ✅ Create product and return secretKey separately
   app.post("/api/products", async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(validatedData);
-      res.status(201).json(product);
+
+      res.status(201).json({
+        product: storage.toProduct(product), // safe object (no secretKey)
+        secretKey: product.secretKey, // ✅ exposed only here
+      });
     } catch (error) {
       console.error("Create product error:", error);
       res.status(400).json({ message: error.message });
@@ -87,7 +99,8 @@ export async function registerRoutes(app) {
     try {
       const validatedData = insertProductSchema.partial().parse(req.body);
       const product = await storage.updateProduct(req.params.id, validatedData);
-      if (!product) return res.status(404).json({ message: "Product not found" });
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
       res.json(product);
     } catch (error) {
       console.error("Update product error:", error);
@@ -95,10 +108,12 @@ export async function registerRoutes(app) {
     }
   });
 
-  // ❌ We are NOT using delete anymore (kept here if you want rollback later)
+  // ❌ Delete disabled
   app.delete("/api/products/:id", async (req, res) => {
     try {
-      res.status(403).json({ message: "Deleting products is disabled. Use 'mark as sold' instead." });
+      res.status(403).json({
+        message: "Deleting products is disabled. Use 'mark as sold' instead.",
+      });
     } catch (error) {
       console.error("Delete product error:", error);
       res.status(500).json({ message: "Failed to delete product" });
@@ -107,7 +122,9 @@ export async function registerRoutes(app) {
 
   app.get("/api/products/delete/:id", async (req, res) => {
     try {
-      res.status(403).send("❌ Deleting products is disabled. Use 'mark as sold' instead.");
+      res
+        .status(403)
+        .send("❌ Deleting products is disabled. Use 'mark as sold' instead.");
     } catch (error) {
       console.error("Delete product error (link):", error);
       res.status(500).send("❌ Failed to delete product");
@@ -122,7 +139,6 @@ export async function registerRoutes(app) {
         return res.status(400).json({ message: "Secret key is required" });
       }
 
-      // ✅ Fetch product directly from DB (with secretKey)
       const product = await ProductModel.findById(req.params.id);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
@@ -136,7 +152,10 @@ export async function registerRoutes(app) {
       product.soldAt = new Date();
       await product.save();
 
-      res.json({ message: "✅ Product marked as sold", product: storage.toProduct(product) });
+      res.json({
+        message: "✅ Product marked as sold",
+        product: storage.toProduct(product),
+      });
     } catch (error) {
       console.error("Mark sold error:", error);
       res.status(500).json({ message: "Failed to mark product as sold" });
@@ -154,12 +173,15 @@ export async function registerRoutes(app) {
   app.post("/api/cart/:sessionId", async (req, res) => {
     const { sessionId } = req.params;
     const { productId } = req.body;
-    if (!productId) return res.status(400).json({ message: "productId is required" });
+    if (!productId)
+      return res.status(400).json({ message: "productId is required" });
 
     let cart = await Cart.findOne({ sessionId });
     if (!cart) cart = await Cart.create({ sessionId, products: [] });
 
-    const existing = cart.products.find(p => p.productId.toString() === productId);
+    const existing = cart.products.find(
+      (p) => p.productId.toString() === productId
+    );
     if (existing) {
       existing.quantity += 1;
     } else {
@@ -175,7 +197,9 @@ export async function registerRoutes(app) {
     const cart = await Cart.findOne({ sessionId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    cart.products = cart.products.filter(p => p.productId.toString() !== productId);
+    cart.products = cart.products.filter(
+      (p) => p.productId.toString() !== productId
+    );
     await cart.save();
 
     res.json(cart);

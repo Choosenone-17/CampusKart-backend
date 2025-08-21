@@ -30,47 +30,49 @@ export const insertProductSchema = z.object({
   soldAt: z.date().optional(),
 });
 
-// ✅ Mongoose schema
-const productSchema = new Schema({
-  title: { type: String, required: true },
-  description: { type: String, required: true },
-  price: { type: Number, required: true },
-  category: {
-    type: String,
-    required: true,
-    enum: [
-      "textbooks",
-      "electronics",
-      "dorm-items",
-      "supplies",
-      "clothing",
-      "furniture",
-      "other",
-    ],
-  },
-  images: { type: [String], default: [] },
-  sellerName: { type: String, required: true },
-  contactMethod: {
-    type: String,
-    required: true,
-    enum: ["email", "phone", "whatsapp", "telegram"],
-  },
-  contactDetails: { type: String, required: true },
-  condition: {
-    type: String,
-    enum: ["new", "like-new", "good", "fair", "poor"],
-    default: "good",
-  },
-  createdAt: { type: Date, default: Date.now },
+// ✅ Mongoose schema with timestamps
+const productSchema = new Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    price: { type: Number, required: true },
+    category: {
+      type: String,
+      required: true,
+      enum: [
+        "textbooks",
+        "electronics",
+        "dorm-items",
+        "supplies",
+        "clothing",
+        "furniture",
+        "other",
+      ],
+    },
+    images: { type: [String], default: [] },
+    sellerName: { type: String, required: true },
+    contactMethod: {
+      type: String,
+      required: true,
+      enum: ["email", "phone", "whatsapp", "telegram"],
+    },
+    contactDetails: { type: String, required: true },
+    condition: {
+      type: String,
+      enum: ["new", "like-new", "good", "fair", "poor"],
+      default: "good",
+    },
 
-  // 🔹 New fields for sold-out logic
-  status: {
-    type: String,
-    enum: ["available", "sold"],
-    default: "available",
+    // 🔹 Sold-out logic
+    status: {
+      type: String,
+      enum: ["available", "sold"],
+      default: "available",
+    },
+    secretKey: { type: String, required: true },
+    soldAt: { type: Date, default: null },
   },
-  secretKey: { type: String, required: true }, 
-  soldAt: { type: Date, default: null },
-});
+  { timestamps: true } 
+);
 
 export const ProductModel = mongoose.model("Product", productSchema);
