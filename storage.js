@@ -63,6 +63,18 @@ export class MongoStorage {
     try {
       const secretKey = crypto.randomBytes(6).toString("hex");
 
+      if (insertProduct.contactMethod === "whatsapp" && insertProduct.contactDetails) {
+        let phone = insertProduct.contactDetails.trim();
+
+        phone = phone.replace(/\D/g, "");
+
+        if (/^\d{10}$/.test(phone)) {
+          phone = "91" + phone;
+        }
+
+        insertProduct.contactDetails = phone;
+      }
+
       const product = new ProductModel({
         ...insertProduct,
         images: insertProduct.images || [],
