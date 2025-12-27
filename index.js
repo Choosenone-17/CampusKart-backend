@@ -16,7 +16,7 @@ function log(message, source = "express") {
 const app = express();
 
 app.use(cors({
-  origin: "https://campuskartz.in", 
+  origin: "https://www.campuskartz.in", 
   credentials: true
 }));
 
